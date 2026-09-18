@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# 运行时数据（自动生成，不入库）
+uploads/
+reports/
+chain_sim.json
+*.db
+*.log
+nohup.out
+
+# 第三方 FISCO SDK（自带 .git 的外部克隆，代码未直接引用）
+python_sdk/
+
+# 前端依赖（dist 构建产物保留，克隆后开箱即用）
+frontend/node_modules/
+frontend/.vite/
+
+# IDE / 系统
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
