@@ -52,6 +52,8 @@ def login():
         user = s.query(User).filter(User.username == username).first()
         if not user or user.password_md5 != md5(password):
             return jsonify({"message": "账号或密码错误"}), 400
+        if getattr(user, "status", "active") != "active":
+            return jsonify({"message": "该账号已被禁用，请联系管理员"}), 403
         session["user_id"] = user.id
         session["username"] = user.username
         session["role"] = user.role

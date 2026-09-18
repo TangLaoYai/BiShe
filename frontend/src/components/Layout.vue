@@ -4,6 +4,9 @@
       <div class="logo">🛡 合约审计系统</div>
       <el-menu :default-active="$route.path" router background-color="#001529"
                text-color="#b7c0cd" active-text-color="#ffffff" style="border-right:none">
+        <el-menu-item index="/dashboard">
+          <el-icon><DataLine /></el-icon><span>系统总览</span>
+        </el-menu-item>
         <el-menu-item index="/contracts">
           <el-icon><Document /></el-icon><span>合约管理</span>
         </el-menu-item>
@@ -12,6 +15,9 @@
         </el-menu-item>
         <el-menu-item index="/evidence">
           <el-icon><Link /></el-icon><span>存证记录</span>
+        </el-menu-item>
+        <el-menu-item v-if="store.user?.role === 'admin'" index="/users">
+          <el-icon><User /></el-icon><span>用户管理</span>
         </el-menu-item>
       </el-menu>
     </el-aside>
@@ -33,7 +39,7 @@
 </template>
 
 <script setup>
-import { Document, Search, Link } from '@element-plus/icons-vue'
+import { Document, Search, Link, DataLine, User } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '../api'

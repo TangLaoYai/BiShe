@@ -33,6 +33,7 @@ class User(Base):
     password_md5 = Column(String(32), nullable=False, comment="MD5加密密码")
     role = Column(String(20), nullable=False, default="user", comment="角色：admin/user")
     create_time = Column(DateTime, nullable=False, comment="创建时间")
+    status = Column(String(20), nullable=False, default="active", comment="账号状态：active/disabled")
 
 
 class Contract(Base):
@@ -148,11 +149,14 @@ def _migrate(eng):
     - audit_record.user_id / contract_id / audit_time 索引
     - vulnerability.audit_id / risk_level 索引
     - evidence.audit_id / user_id 索引
+    - user.status 列（账号禁用/启用功能）
     """
     # 列：MySQL 错误码 1060 表示重复列名，静默跳过
     alter_columns = [
         "ALTER TABLE contract ADD COLUMN function_count INT NOT NULL DEFAULT 0 "
         "COMMENT 'public/external函数数量（上传时预存）'",
+        "ALTER TABLE user ADD COLUMN status VARCHAR(20) NOT NULL DEFAULT 'active' "
+        "COMMENT '账号状态：active/disabled'",
     ]
     # 索引：MySQL 错误码 1061 表示重复键名，静默跳过
     create_indexes = [

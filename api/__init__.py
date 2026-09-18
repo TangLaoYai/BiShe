@@ -43,7 +43,11 @@ def register_blueprints(app):
     from .contract import bp as contract_bp
     from .audit import bp as audit_bp
     from .evidence import bp as evidence_bp
+    from .user import bp as user_bp
+    from .stats import bp as stats_bp
     app.register_blueprint(auth_bp)
     app.register_blueprint(contract_bp)
     app.register_blueprint(audit_bp)
     app.register_blueprint(evidence_bp)
+    app.register_blueprint(user_bp)
+    app.register_blueprint(stats_bp)
