@@ -67,6 +67,7 @@ class AuditRecord(Base):
     user_id = Column(Integer, nullable=False, comment="执行用户ID")
     audit_time = Column(DateTime, nullable=False, comment="审计时间")
     status = Column(String(20), nullable=False, default="running", comment="状态：running/完成/失败")
+    error = Column(String(500), nullable=True, comment="失败原因/中断原因")
 
 
 class Vulnerability(Base):
@@ -139,6 +140,20 @@ def init_db():
     finally:
         s.close()
 
+    # 僵尸审计任务恢复：审计在 daemon 后台线程执行，服务重启/崩溃后
+    # 残留的 running 任务永远不会再被推进，统一标记为失败，允许用户重新发起。
+    s = Session()
+    try:
+        stuck = s.query(AuditRecord).filter(AuditRecord.status == "running").all()
+        if stuck:
+            for r in stuck:
+                r.status = "失败"
+                r.error = "服务重启导致审计任务中断，请重新发起审计"
+            s.commit()
+            print(f"[recover] {len(stuck)} 个未完成的审计任务已标记为失败")
+    finally:
+        s.close()
+
 
 def _migrate(eng):
     """对已存在的旧表进行兼容性升级：补充新列、补充新索引（重复创建时静默忽略）
@@ -157,6 +172,8 @@ def _migrate(eng):
         "COMMENT 'public/external函数数量（上传时预存）'",
         "ALTER TABLE user ADD COLUMN status VARCHAR(20) NOT NULL DEFAULT 'active' "
         "COMMENT '账号状态：active/disabled'",
+        "ALTER TABLE audit_record ADD COLUMN error VARCHAR(500) NULL "
+        "COMMENT '失败原因/中断原因'",
     ]
     # 索引：MySQL 错误码 1061 表示重复键名，静默跳过
     create_indexes = [

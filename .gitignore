@@ -24,3 +24,6 @@ frontend/.vite/
 .idea/
 Thumbs.db
 .DS_Store
+
+# 毕业设计文档（文档不入代码仓库）
+*.docx

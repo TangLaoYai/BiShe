@@ -36,7 +36,11 @@
         <el-table-column prop="audit_time" label="审计时间" width="170" />
         <el-table-column label="状态" width="90">
           <template #default="{ row }">
-            <el-tag :type="statusType(row.status)" size="small">{{ row.status }}</el-tag>
+            <el-tooltip v-if="row.status === '失败' && row.error" :content="row.error"
+                        placement="top" :show-after="200">
+              <el-tag :type="statusType(row.status)" size="small">{{ row.status }}</el-tag>
+            </el-tooltip>
+            <el-tag v-else :type="statusType(row.status)" size="small">{{ row.status }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="高危" width="70">
@@ -58,9 +62,11 @@
           </template>
         </el-table-column>
         <el-table-column v-if="isAdmin()" prop="uploader" label="执行用户" width="110" />
-        <el-table-column label="操作" width="100" fixed="right">
+        <el-table-column label="操作" width="180" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" @click="$router.push(`/audits/${row.audit_id}`)">查看详情</el-button>
+            <el-button v-if="isAdmin() && row.status === 'running'" link type="danger"
+                       @click="markFailed(row)">标记失败</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -73,7 +79,7 @@
 
 <script setup>
 import { onMounted, reactive, ref } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '../api'
 import { isAdmin } from '../store'
 
@@ -116,6 +122,23 @@ function doReset() {
 function changePage(p) {
   query.page = p
   loadList()
+}
+
+async function markFailed(row) {
+  try {
+    await ElMessageBox.confirm(
+      `确定将审计 ${row.audit_id} 标记为失败吗？标记后可重新发起审计。`,
+      '任务救援', { type: 'warning', 'confirm-button-text': '标记失败', 'cancel-button-text': '取消' })
+  } catch {
+    return
+  }
+  try {
+    await api.post(`/audits/${row.audit_id}/fail`)
+    ElMessage.success('已标记为失败')
+    loadList()
+  } catch (e) {
+    ElMessage.error(e.message)
+  }
 }
 
 onMounted(loadList)

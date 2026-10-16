@@ -53,9 +53,18 @@ async function doLogin() {
 <style scoped>
 .auth-wrap {
   min-height: 100vh; display: flex; align-items: center; justify-content: center;
-  background: linear-gradient(135deg, #1f3a5f 0%, #10182b 100%);
+  /* 自定义背景图：把图片命名为 login-bg.jpg 放入 src/assets/，
+     将下面 background 一行替换为：
+     background: url('../assets/login-bg.jpg') center/cover no-repeat; */
+  background: linear-gradient(135deg, #1f2a48 0%, #2c4a7c 50%, #3b6ea5 100%);
 }
-.auth-card { width: 380px; padding: 10px 15px; }
+.auth-card {
+  width: 380px; padding: 10px 15px;
+  background-color: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(8px);
+  border-radius: 8px;
+}
 .auth-title { text-align: center; margin-bottom: 25px; color: #303133; }
 .to-register { text-align: center; margin-top: 12px; font-size: 14px; color: #909399; }
 </style>
+

@@ -14,7 +14,7 @@ from detectors import get_detectors
 from services.solc_parser import parse_source
 from services.reports import get_report_generator
 from utils import now_minute
-from . import login_required, current_user
+from . import login_required, admin_required, current_user
 from .contract import contract_file_path, save_sol_file
 
 bp = Blueprint("audit", __name__, url_prefix="/api/audits")
@@ -50,6 +50,28 @@ def create_audit():
 
     threading.Thread(target=_run_audit, args=(audit_id,), daemon=True).start()
     return jsonify({"audit_id": audit_id, "status": "running"})
+
+
+@bp.post("/<audit_id>/fail")
+@admin_required
+def mark_audit_failed(audit_id: str):
+    """管理员救援：将卡死的 running 审计手动标记为失败（Slither 挂起等场景）
+
+    仅 running 状态可操作；标记后用户可对同一合约重新发起审计。
+    """
+    s = database.Session()
+    try:
+        r = s.query(AuditRecord).filter(AuditRecord.audit_id == audit_id).first()
+        if not r:
+            return jsonify({"message": "审计记录不存在"}), 404
+        if r.status != "running":
+            return jsonify({"message": f"当前状态为「{r.status}」，无需救援"}), 400
+        r.status = "失败"
+        r.error = "管理员手动标记：检测任务超时或无响应"
+        s.commit()
+        return jsonify({"audit_id": audit_id, "status": "失败"})
+    finally:
+        database.Session.remove()
 
 
 def _run_audit(audit_id: str):
@@ -208,6 +230,7 @@ def list_audits():
             "contract_name": contract_name,
             "audit_time": r.audit_time.strftime("%Y-%m-%d %H:%M"),
             "status": r.status,
+            "error": r.error or "",
             "high": count_map.get(r.audit_id, {}).get("高危", 0),
             "medium": count_map.get(r.audit_id, {}).get("中危", 0),
             "low": count_map.get(r.audit_id, {}).get("低危", 0),
@@ -263,6 +286,7 @@ def audit_detail(audit_id: str):
         return jsonify({
             "audit_id": r.audit_id,
             "status": r.status,
+            "error": r.error or "",
             "audit_time": r.audit_time.strftime("%Y-%m-%d %H:%M"),
             "contract": {
                 "id": c.id, "contract_name": c.contract_name,
