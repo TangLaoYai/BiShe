@@ -61,7 +61,7 @@ SOLC_MODE = "off"
 # FISCO_SIMULATE = True：链节点未就绪时的模拟模式，接口行为与真实一致
 #   （交易哈希为确定性模拟值，链上数据落地到 chain_sim.json，用于全流程联调）
 # FISCO_SIMULATE = False：真实调用 FISCO BCOS Python SDK（需虚拟机节点就绪）
-FISCO_SIMULATE = False
+FISCO_SIMULATE = True  # 2026-10-28 临时：VM 未启动时用模拟链
 FISCO_GROUP_ID = 1
 FISCO_CONTRACT_ADDRESS = "0xc6d09d57e9fd74f155fd5a77455945ed73028914"  # AuditEvidence 存证合约部署后的地址
 SIM_CHAIN_FILE = os.path.join(BASE_DIR, "chain_sim.json")  # 模拟链存储文件

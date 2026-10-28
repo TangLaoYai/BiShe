@@ -82,6 +82,8 @@ class Vulnerability(Base):
     audit_id = Column(String(64), nullable=False, comment="关联审计ID")
     vul_type = Column(String(50), nullable=False, comment="漏洞类型")
     risk_level = Column(String(20), nullable=False, comment="风险等级：高危/中危/低危")
+    confidence = Column(String(10), nullable=False, default="中",
+                        comment="检测置信度：高/中/低")
     location = Column(String(200), nullable=False, comment="漏洞位置（行号/函数名）")
     description = Column(Text, comment="漏洞描述")
     suggestion = Column(Text, comment="修复建议")
@@ -100,6 +102,7 @@ class Evidence(Base):
     contract_hash = Column(String(64), nullable=False, comment="合约源码SHA256")
     audit_hash = Column(String(64), nullable=False, comment="审计记录SHA256")
     tx_hash = Column(String(66), nullable=False, comment="链上交易哈希")
+    block_number = Column(Integer, nullable=True, comment="所在区块高度（链上回查用）")
     chain_time = Column(DateTime, nullable=False, comment="上链时间")
     user_id = Column(Integer, nullable=False, comment="存证用户ID")
 
@@ -174,6 +177,10 @@ def _migrate(eng):
         "COMMENT '账号状态：active/disabled'",
         "ALTER TABLE audit_record ADD COLUMN error VARCHAR(500) NULL "
         "COMMENT '失败原因/中断原因'",
+        "ALTER TABLE vulnerability ADD COLUMN confidence VARCHAR(10) NOT NULL DEFAULT '中' "
+        "COMMENT '检测置信度：高/中/低'",
+        "ALTER TABLE evidence ADD COLUMN block_number INT NULL "
+        "COMMENT '所在区块高度（链上回查用）'",
     ]
     # 索引：MySQL 错误码 1061 表示重复键名，静默跳过
     create_indexes = [

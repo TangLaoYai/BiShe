@@ -8,10 +8,16 @@ class BaseDetector:
     返回统一漏洞列表：[{
         "vul_type": str,       # 漏洞类型
         "risk_level": str,     # 高危/中危/低危
+        "confidence": str,     # 检测置信度：高/中/低（区分规则确定性与启发式推断）
         "location": str,       # 位置（行号/函数名）
         "description": str,    # 漏洞描述
         "suggestion": str,     # 修复建议
     }]
+
+    confidence 说明：
+    - 高：规则可确定命中（如 tx.origin、selfdestruct、硬编码私钥），误报概率低
+    - 中：启发式推断（如未授权访问、参数边界缺失），需人工复核上下文
+    - 低：弱信号提示（如时间戳依赖），仅供参考
     """
     name = "base"
     description = ""

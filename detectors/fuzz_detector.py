@@ -56,6 +56,8 @@ class BoundaryFuzzDetector(BaseDetector):
                 vulns.append({
                     "vul_type": "参数边界校验缺失风险",
                     "risk_level": RISK_MID,
+                    # 启发式判定：未检测到 require/if 范围校验，业务上可能由上层约束保证
+                    "confidence": "中",
                     "location": f"第{fn['line']}行 {fn['name']}({format_params(fn['params'])}) 参数 {pname}",
                     "description": (
                         f"对外接口 {fn['name']} 的数值参数 {pname}（{param['type']}，{bits}位）"

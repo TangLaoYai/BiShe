@@ -22,17 +22,25 @@ const routes = [
 
 const router = createRouter({ history: createWebHistory(), routes })
 
+function defaultHome(user) {
+  return user?.role === 'admin' ? '/dashboard' : '/contracts'
+}
+
 router.beforeEach(async (to) => {
   const user = await loadUser()
   if (!user && to.path !== '/login' && to.path !== '/register') {
     return '/login'
   }
   if (user && (to.path === '/login' || to.path === '/register')) {
-    return '/dashboard'
+    return defaultHome(user)
   }
   // 管理员页面权限拦截
   if (to.meta.requireAdmin && user?.role !== 'admin') {
-    return '/dashboard'
+    return defaultHome(user)
+  }
+  // 根路径：普通用户直接进合约管理（自己上传过的合约），管理员进系统总览
+  if (to.path === '/' || to.path === '') {
+    return defaultHome(user)
   }
   document.title = to.meta.title ? `${to.meta.title} - 智能合约漏洞审计系统` : '智能合约漏洞审计系统'
   return true

@@ -61,6 +61,8 @@ class AuthDetector(BaseDetector):
             vulns.append({
                 "vul_type": "未授权访问风险",
                 "risk_level": level,
+                # 启发式判定：部分公开函数可能是设计上允许任何人调用（如 deposit），需人工复核
+                "confidence": "低" if is_readonly else "中",
                 "location": f"第{fn['line']}行 {signature}",
                 "description": (
                     f"对外接口 {signature} 为 {fn['visibility']} 函数，"

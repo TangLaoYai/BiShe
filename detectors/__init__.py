@@ -9,6 +9,8 @@ from .base import BaseDetector, register, get_detectors
 from .slither_detector import SlitherDetector      # noqa: F401 注册静态扫描
 from .auth_detector import AuthDetector            # noqa: F401 注册接口权限检测
 from .fuzz_detector import BoundaryFuzzDetector    # noqa: F401 注册边界Fuzz检测
+from .secret_detector import HardcodedSecretDetector  # noqa: F401 注册敏感信息硬编码检测
 
 __all__ = ["BaseDetector", "register", "get_detectors",
-           "SlitherDetector", "AuthDetector", "BoundaryFuzzDetector"]
+           "SlitherDetector", "AuthDetector", "BoundaryFuzzDetector",
+           "HardcodedSecretDetector"]

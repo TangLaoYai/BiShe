@@ -16,9 +16,14 @@ def _line_of(source: str, pos: int) -> int:
 
 
 def _strip_comments(source: str) -> str:
-    """去除注释后扫描，避免误报"""
-    source = re.sub(r"//[^\n]*", "", source)
-    source = re.sub(r"/\*.*?\*/", "", source, flags=re.S)
+    """去除注释后扫描，避免误报。
+
+    用等长空白替换注释内容（保留换行），使命中位置与原文偏移一致，
+    从而保证报出的行号准确。
+    """
+    source = re.sub(r"/\*.*?\*/", lambda m: re.sub(r"[^\n]", " ", m.group(0)),
+                    source, flags=re.S)
+    source = re.sub(r"//[^\n]*", lambda m: " " * len(m.group(0)), source)
     return source
 
 
@@ -26,6 +31,7 @@ RULES = [
     {
         "type": "tx.origin鉴权缺陷",
         "level": RISK_HIGH,
+        "confidence": "高",
         "pattern": r"\btx\.origin\b",
         "desc": "代码中使用 tx.origin 做身份校验，存在钓鱼合约中间人攻击风险："
                 "受害者在钓鱼合约触发本合约代码时，tx.origin 仍是受害者地址，导致鉴权被绕过。",
@@ -34,6 +40,7 @@ RULES = [
     {
         "type": "危险delegatecall",
         "level": RISK_HIGH,
+        "confidence": "高",
         "pattern": r"\.\s*delegatecall\s*\(",
         "desc": "存在 delegatecall 调用，目标合约代码会在本合约上下文执行并可直接修改本合约状态，"
                 "若目标地址可被外部控制将导致任意代码执行。",
@@ -42,6 +49,7 @@ RULES = [
     {
         "type": "任意自毁",
         "level": RISK_HIGH,
+        "confidence": "高",
         "pattern": r"\bselfdestruct\s*\(",
         "desc": "存在 selfdestruct 调用，若自毁入口无权限控制或目标可指定，合约将被销毁且资金可被强制转移。",
         "suggestion": "为 selfdestruct 添加 onlyOwner 等强权限校验，并审计其调用路径。",
@@ -49,6 +57,7 @@ RULES = [
     {
         "type": "外部调用重入风险",
         "level": RISK_MID,
+        "confidence": "中",
         "pattern": r"\.\s*call\s*\{?|\.\s*transfer\s*\(|\.\s*send\s*\(",
         "desc": "函数内存在对外部地址的以太转账/调用，若在状态更新前执行且无重入保护，攻击者可利用 "
                 "fallback 重入本函数重复提取资金。",
@@ -60,6 +69,7 @@ RULES = [
     {
         "type": "未检查底层调用返回值",
         "level": RISK_LOW,
+        "confidence": "中",
         "pattern": r"\.\s*call\s*\{?value?",
         "desc": "底层 call 调用的返回值（bool）未被检查，调用失败时不会回滚，"
                 "可能导致合约状态与资金流不一致。",
@@ -68,6 +78,7 @@ RULES = [
     {
         "type": "时间戳依赖",
         "level": RISK_LOW,
+        "confidence": "低",
         "pattern": r"\bblock\.timestamp\b|\bnow\b",
         "desc": "逻辑依赖区块时间戳，矿工可在一定范围内操纵时间戳影响关键判定。",
         "suggestion": "不要将 block.timestamp 作为随机源或强依赖的判定条件；"
@@ -76,6 +87,7 @@ RULES = [
     {
         "type": "弱随机数",
         "level": RISK_MID,
+        "confidence": "中",
         "pattern": r"\bblockhash\s*\(|\bblock\.(difficulty|number)\b",
         "desc": "使用区块属性作为随机源，矿工可影响区块属性从而操纵随机结果。",
         "suggestion": "改用 Chainlink VRF 等链上安全随机数方案，或 commit-reveal 模式。",
@@ -112,6 +124,7 @@ class BuiltinScannerDetector(BaseDetector):
                 vulns.append({
                     "vul_type": rule["type"],
                     "risk_level": rule["level"],
+                    "confidence": rule.get("confidence", "中"),
                     "location": f"第{_line_of(source, self._raw_pos(source, code, m.start()))}行",
                     "description": rule["desc"],
                     "suggestion": rule["suggestion"],
@@ -123,6 +136,7 @@ class BuiltinScannerDetector(BaseDetector):
             vulns.append({
                 "vul_type": "整数溢出风险",
                 "risk_level": RISK_MID,
+                "confidence": "中",
                 "location": "全局",
                 "description": "编译版本低于 0.8.0 且未引入 SafeMath，加减乘运算可能发生整数上溢/下溢。",
                 "suggestion": "升级编译器至 ^0.8.0，或全部算术运算改用 SafeMath 库。",
@@ -141,5 +155,5 @@ class BuiltinScannerDetector(BaseDetector):
         return code[idx:end + 1 if end > 0 else brace]
 
     def _raw_pos(self, source: str, code: str, code_pos: int) -> int:
-        """粗略将去注释后的偏移映射回原文本偏移（前后按同源截断近似）"""
+        """去注释使用等长替换，偏移与原文一致，直接返回命中位置"""
         return min(code_pos, len(source) - 1)

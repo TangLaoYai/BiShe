@@ -84,6 +84,7 @@ def list_contracts():
     """
     user = current_user()
     keyword = (request.args.get("keyword") or "").strip()
+    user_id_q = request.args.get("user_id")  # 管理员可按用户 ID 过滤
     try:
         page = max(1, int(request.args.get("page", 1)))
         page_size = min(50, max(1, int(request.args.get("page_size", 10))))
@@ -95,6 +96,11 @@ def list_contracts():
         q = s.query(Contract, User.username).outerjoin(User, Contract.user_id == User.id)
         if user["role"] != "admin":
             q = q.filter(Contract.user_id == user["user_id"])
+        elif user_id_q:
+            try:
+                q = q.filter(Contract.user_id == int(user_id_q))
+            except ValueError:
+                pass
         if keyword:
             # 前缀匹配，可走 ix_contract_name 索引；如需双向模糊用 %keyword%
             q = q.filter(Contract.contract_name.like(f"{keyword}%"))

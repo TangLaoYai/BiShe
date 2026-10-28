@@ -1,29 +1,45 @@
-# Python
+# ============== Python ==============
 __pycache__/
 *.pyc
+*.pyo
 .venv/
 venv/
+env/
+*.egg-info/
+*.egg
+.mypy_cache/
 
-# 运行时数据（自动生成，不入库）
+# ============== 运行时数据（自动生成，不入库） ==============
 uploads/
 reports/
 chain_sim.json
 *.db
+*.sqlite3
 *.log
 nohup.out
+bin/logs/
 
-# 第三方 FISCO SDK（自带 .git 的外部克隆，代码未直接引用）
+# ============== 第三方 FISCO SDK（自带 .git 的外部克隆 ==============
 python_sdk/
 
-# 前端依赖（dist 构建产物保留，克隆后开箱即用）
+# ============== 前端依赖（保留 dist 构建产物用于部署） ==============
 frontend/node_modules/
 frontend/.vite/
+frontend/src/assets/
 
-# IDE / 系统
+# ============== 调试/临时 ==============
+debug_vm.py
+test_full.py
+TASKS.md
 .vscode/
 .idea/
 Thumbs.db
 .DS_Store
+*.swp
+*.swo
+*~
 
-# 毕业设计文档（文档不入代码仓库）
+# ============== 毕业设计文档（文档不入代码仓库 ==============
 *.docx
+*.pdf
+*.doc

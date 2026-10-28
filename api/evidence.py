@@ -79,12 +79,14 @@ def chain_evidence():
 
         ev = Evidence(audit_id=audit_id, contract_hash=contract_hash,
                       audit_hash=audit_hash, tx_hash=result["tx_hash"][:66],
+                      block_number=result.get("block_number"),
                       chain_time=now_minute(), user_id=current_user()["user_id"])
         s.add(ev)
         s.commit()
         return jsonify({
             "message": "上链存证成功",
             "tx_hash": ev.tx_hash,
+            "block_number": ev.block_number,
             "chain_time": ev.chain_time.strftime("%Y-%m-%d %H:%M"),
             "contract_hash": contract_hash,
             "audit_hash": audit_hash,
@@ -152,6 +154,7 @@ def list_evidence():
     """
     user = current_user()
     hash_q = (request.args.get("hash") or "").strip()
+    user_id_q = request.args.get("user_id")  # 管理员可按用户 ID 过滤历史存证
     try:
         page = max(1, int(request.args.get("page", 1)))
         page_size = min(50, max(1, int(request.args.get("page_size", 10))))
@@ -165,6 +168,11 @@ def list_evidence():
              .join(Contract, AuditRecord.contract_id == Contract.id))
         if user["role"] != "admin":
             q = q.filter(Evidence.user_id == user["user_id"])
+        elif user_id_q:
+            try:
+                q = q.filter(Evidence.user_id == int(user_id_q))
+            except ValueError:
+                pass
         if hash_q:
             # 前缀匹配任一哈希字段；OR 查询，存证数据通常不大可接受全表扫
             prefix = f"{hash_q}%"
@@ -182,9 +190,62 @@ def list_evidence():
             "contract_name": contract_name,
             "chain_time": ev.chain_time.strftime("%Y-%m-%d %H:%M"),
             "tx_hash": ev.tx_hash,
+            "block_number": ev.block_number,
             "contract_hash": ev.contract_hash,
             "audit_hash": ev.audit_hash,
         } for ev, contract_name in rows]
         return jsonify({"total": total, "page": page, "page_size": page_size, "items": items})
+    finally:
+        database.Session.remove()
+
+
+# ===================== 链上区块回查 =====================
+
+@bp.get("/block")
+@login_required
+def get_block():
+    """查询交易所在区块详情：
+    - 参数：tx_hash（可选，优先）或 audit_id
+    - 返回：{block_number, timestamp, tx_count, group_id, simulate?}
+    """
+    tx_hash = (request.args.get("tx_hash") or "").strip()
+    audit_id = (request.args.get("audit_id") or "").strip()
+    user = current_user()
+
+    s = database.Session()
+    try:
+        if not tx_hash and audit_id:
+            ev = s.query(Evidence).filter(Evidence.audit_id == audit_id).first()
+            if not ev:
+                return jsonify({"message": "该审计尚未上链存证"}), 404
+            if user["role"] != "admin":
+                record = s.query(AuditRecord).filter(AuditRecord.audit_id == audit_id).first()
+                if not record or record.user_id != user["user_id"]:
+                    return jsonify({"message": "无权访问该审计记录"}), 403
+            tx_hash = ev.tx_hash
+        if not tx_hash:
+            return jsonify({"message": "请提供 tx_hash 或 audit_id"}), 400
+
+        info = fisco_client.get_block_info(tx_hash)
+        if info is None:
+            return jsonify({"message": "链节点暂不可用"}), 503
+        if "error" in info:
+            return jsonify({"message": info["error"]}), 404 if "未找到" in info["error"] else 502
+
+        from datetime import datetime, timezone
+        ts = info.get("timestamp", 0)
+        if isinstance(ts, (int, float)) and ts > 0:
+            try:
+                info["time"] = datetime.fromtimestamp(ts, tz=timezone.utc).astimezone().strftime("%Y-%m-%d %H:%M:%S")
+            except Exception:
+                info["time"] = str(ts)
+
+        # 尝试从数据库回查 block_number（供旧存证补回查）
+        if "simulate" not in info and audit_id:
+            ev = s.query(Evidence).filter(Evidence.audit_id == audit_id).first()
+            if ev and ev.block_number is None and info.get("block_number"):
+                ev.block_number = info["block_number"]
+                s.commit()
+        return jsonify(info)
     finally:
         database.Session.remove()

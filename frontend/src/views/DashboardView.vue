@@ -87,15 +87,28 @@ function renderTrend(trend) {
   if (!trendChart) trendChart = echarts.init(trendRef.value)
   trendChart.setOption({
     tooltip: { trigger: 'axis' },
-    grid: { left: 40, right: 20, top: 30, bottom: 30 },
+    legend: { data: ['审计数', '检出漏洞', '高危漏洞'], top: 0 },
+    grid: { left: 40, right: 20, top: 40, bottom: 30 },
     xAxis: { type: 'category', data: trend.map(t => t.date), boundaryGap: false },
     yAxis: { type: 'value', minInterval: 1 },
-    series: [{
-      name: '审计数', type: 'line', smooth: true,
-      data: trend.map(t => t.count),
-      itemStyle: { color: '#409EFF' },
-      areaStyle: { color: 'rgba(64,158,255,0.15)' },
-    }],
+    series: [
+      {
+        name: '审计数', type: 'line', smooth: true,
+        data: trend.map(t => t.audits ?? t.count ?? 0),
+        itemStyle: { color: '#409EFF' },
+        areaStyle: { color: 'rgba(64,158,255,0.12)' },
+      },
+      {
+        name: '检出漏洞', type: 'line', smooth: true,
+        data: trend.map(t => t.vulns ?? 0),
+        itemStyle: { color: '#E6A23C' },
+      },
+      {
+        name: '高危漏洞', type: 'line', smooth: true,
+        data: trend.map(t => t.high ?? 0),
+        itemStyle: { color: '#F56C6C' },
+      },
+    ],
   })
 }
 

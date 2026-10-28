@@ -8,6 +8,9 @@
             <el-button type="primary" plain @click="downloadReport" :disabled="!detail.audit_id">
               导出 TXT 报告
             </el-button>
+            <el-button type="primary" @click="downloadPdf" :disabled="!detail.audit_id">
+              导出 PDF 报告
+            </el-button>
             <el-button type="success" :disabled="!canChain" @click="chainEvidence">
               {{ detail.evidence ? '已上链存证' : '上链存证' }}
             </el-button>
@@ -17,7 +20,23 @@
           </div>
         </div>
       </template>
-      <el-descriptions :column="3" border>
+
+      <!-- 实时进度条：running 状态可见，SSE 推送自动更新 -->
+      <div v-if="progress.status === 'running'" class="progress-box">
+        <div class="progress-label">
+          <span class="spin-loader"></span>
+          <b>检测进行中…</b>
+          <span class="progress-current">{{ progress.current ? '当前：' + progress.current : '初始化中' }}</span>
+          <span class="progress-vulns">已检漏洞 {{ progress.vulns }}</span>
+        </div>
+        <el-progress :percentage="progress.percent" :stroke-width="14"
+                     :status="progress.percent === 100 ? 'success' : ''" />
+        <div class="progress-step">
+          步骤 {{ progress.done }} / {{ progress.total }}
+        </div>
+      </div>
+
+      <el-descriptions v-if="!progress.status || progress.status !== 'running'" :column="3" border>
         <el-descriptions-item label="审计编号">{{ detail.audit_id }}</el-descriptions-item>
         <el-descriptions-item label="合约名称">{{ detail.contract?.contract_name }}</el-descriptions-item>
         <el-descriptions-item label="审计时间">{{ detail.audit_time }}</el-descriptions-item>
@@ -53,6 +72,13 @@
             <el-tag :type="levelType(row.risk_level)" size="small">{{ row.risk_level }}</el-tag>
           </template>
         </el-table-column>
+        <el-table-column label="置信度" width="90">
+          <template #default="{ row }">
+            <el-tag :type="confidenceType(row.confidence)" size="small" effect="plain">
+              {{ row.confidence || '中' }}
+            </el-tag>
+          </template>
+        </el-table-column>
         <el-table-column prop="location" label="漏洞位置" min-width="210" show-overflow-tooltip />
         <el-table-column prop="description" label="漏洞描述" min-width="260" show-overflow-tooltip />
         <el-table-column prop="suggestion" label="修复建议" min-width="240" show-overflow-tooltip />
@@ -72,6 +98,14 @@
       <el-descriptions :column="1" border>
         <el-descriptions-item label="风险等级">
           <el-tag :type="levelType(currentVuln.risk_level)" size="small">{{ currentVuln.risk_level }}</el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item label="检测置信度">
+          <el-tag :type="confidenceType(currentVuln.confidence)" size="small" effect="plain">
+            {{ currentVuln.confidence || '中' }}
+          </el-tag>
+          <span class="confidence-hint">
+            {{ confidenceHint(currentVuln.confidence) }}
+          </span>
         </el-descriptions-item>
         <el-descriptions-item label="漏洞位置">{{ currentVuln.location }}</el-descriptions-item>
         <el-descriptions-item label="漏洞描述">{{ currentVuln.description }}</el-descriptions-item>
@@ -111,11 +145,21 @@ const vulnVisible = ref(false)
 const currentVuln = reactive({})
 const verifyVisible = ref(false)
 const verifyResult = ref(null)
-let timer = null
+
+// SSE 实时进度状态
+const progress = reactive({ status: '', total: 0, done: 0, percent: 0, current: '', vulns: 0 })
+let evtSource = null
+let fallbackTimer = null
 
 const canChain = computed(() => detail.status === '完成' && !detail.evidence)
 const statusType = (s) => s === '完成' ? 'success' : s === '失败' ? 'danger' : 'warning'
 const levelType = (l) => l === '高危' ? 'danger' : l === '中危' ? 'warning' : 'info'
+const confidenceType = (c) => c === '高' ? 'success' : c === '中' ? 'warning' : 'info'
+const confidenceHint = (c) => c === '高'
+  ? '规则可确定命中，误报概率低'
+  : c === '低'
+    ? '弱信号提示，仅供参考'
+    : '启发式推断，建议人工复核上下文'
 
 async function loadDetail(vulnPage = 1) {
   try {
@@ -123,15 +167,44 @@ async function loadDetail(vulnPage = 1) {
       params: { vuln_page: vulnPage, vuln_page_size: 20 }
     })
     Object.assign(detail, data)
-    if (data.status === 'running' && !timer) {
-      timer = setInterval(() => loadDetail(detail.vulns?.page || 1), 2000)
-    }
-    if (data.status !== 'running' && timer) {
-      clearInterval(timer)
-      timer = null
+    if (data.status === 'running') {
+      ensureSSE()
+    } else if (evtSource) {
+      evtSource.close()
+      evtSource = null
     }
   } catch (e) {
     ElMessage.error(e.message)
+  }
+}
+
+// ===== SSE 实时进度 =====
+function ensureSSE() {
+  if (evtSource) return
+  // EventSource 自动带 cookie（credentials 同域默认）
+  evtSource = new EventSource(`/api/audits/${auditId}/sse`)
+  evtSource.addEventListener('progress', (ev) => {
+    const p = JSON.parse(ev.data)
+    Object.assign(progress, p)
+    if (progress.percent >= 90 && !fallbackTimer) {
+      // SSE 可能在 done 前断开，兜底拉一下详情
+      fallbackTimer = setTimeout(() => loadDetail(detail.vulns?.page || 1), 3000)
+    }
+  })
+  evtSource.addEventListener('done', (ev) => {
+    const d = JSON.parse(ev.data)
+    ElMessage.success(`审计${d.status || '完成'}：检出漏洞 ${d.vuln_count || 0} 条`)
+    if (evtSource) { evtSource.close(); evtSource = null }
+    Object.assign(progress, { status: d.status || '完成', percent: 100 })
+    setTimeout(() => loadDetail(detail.vulns?.page || 1), 300)
+  })
+  evtSource.addEventListener('timeout', () => {
+    ElMessage.warning('审计进度推送超时，切换轮询降级')
+    if (evtSource) { evtSource.close(); evtSource = null }
+    fallbackTimer = setInterval(() => loadDetail(detail.vulns?.page || 1), 2000)
+  })
+  evtSource.onerror = () => {
+    // 静默：可能后端还没准备好，等一轮重试
   }
 }
 
@@ -153,6 +226,22 @@ async function downloadReport() {
     const a = document.createElement('a')
     a.href = url
     a.download = `${auditId}_审计报告.txt`
+    a.click()
+    URL.revokeObjectURL(url)
+  } catch (e) {
+    ElMessage.error(e.message)
+  }
+}
+
+async function downloadPdf() {
+  try {
+    const resp = await fetch(`/api/audits/${auditId}/report.pdf`, { credentials: 'include' })
+    if (!resp.ok) throw new Error('PDF 报告下载失败')
+    const blob = await resp.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${auditId}_审计报告.pdf`
     a.click()
     URL.revokeObjectURL(url)
   } catch (e) {
@@ -191,9 +280,21 @@ function copyTx(hash) {
 }
 
 onMounted(loadDetail)
-onBeforeUnmount(() => { if (timer) clearInterval(timer) })
+onBeforeUnmount(() => {
+  if (evtSource) { evtSource.close(); evtSource = null }
+  if (fallbackTimer) { clearInterval(fallbackTimer); clearTimeout(fallbackTimer); fallbackTimer = null }
+})
 </script>
 
 <style scoped>
 .card-header { display: flex; justify-content: space-between; align-items: center; }
+.confidence-hint { margin-left: 8px; font-size: 12px; color: #909399; }
+.tx-hash { font-family: Consolas, Menlo, monospace; font-size: 12px; color: #409EFF; word-break: break-all; }
+.progress-box { margin-bottom: 16px; padding: 14px 18px; background: linear-gradient(135deg, #fdf6ec 0%, #f0f9ff 100%); border: 1px dashed #94a3b8; border-radius: 8px; }
+.progress-label { display: flex; align-items: center; gap: 14px; font-size: 13px; color: #303133; margin-bottom: 10px; flex-wrap: wrap; }
+.progress-current { color: #409EFF; font-family: Consolas, monospace; }
+.progress-vulns { margin-left: auto; color: #e6a23c; font-weight: 600; }
+.progress-step { font-size: 12px; color: #909399; margin-top: 4px; text-align: right; }
+.spin-loader { display: inline-block; width: 14px; height: 14px; border: 2px solid #409EFF; border-top-color: transparent; border-radius: 50%; animation: spin 0.9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
 </style>

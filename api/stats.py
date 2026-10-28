@@ -8,6 +8,7 @@
 """
 from datetime import datetime, timedelta
 
+import sqlalchemy
 from flask import Blueprint, jsonify
 from sqlalchemy import func
 
@@ -52,24 +53,44 @@ def dashboard():
             "users": s.query(User).count() if is_admin else None,  # 普通用户不显示用户数
         }
 
-        # ---- 2. 近 7 天趋势 ----
+        # ---- 2. 近 7 天趋势（审计数 + 漏洞数 + 高危漏洞数 三折线） ----
         today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
         days = [today - timedelta(days=6 - i) for i in range(7)]
         day_labels = [d.strftime("%m-%d") for d in days]
+        day_start_iso = [d.strftime("%Y-%m-%d 00:00:00") for d in days]
 
+        # 审计数
         audit_q7 = s.query(AuditRecord)
         if not is_admin:
             audit_q7 = audit_q7.filter(AuditRecord.user_id == user["user_id"])
-        # 用 audit_time 的日期分组
-        rows = (audit_q7
-                .with_entities(
-                    func.date(AuditRecord.audit_time).label("d"),
-                    func.count(AuditRecord.id).label("c"))
-                .filter(AuditRecord.audit_time >= days[0])
-                .group_by(func.date(AuditRecord.audit_time)).all())
-        count_map = {str(r.d): r.c for r in rows}
-        trend = [{"date": label, "count": count_map.get(days[i].strftime("%Y-%m-%d"), 0)}
-                 for i, label in enumerate(day_labels)]
+        audit_rows = (audit_q7
+                      .with_entities(
+                          func.date(AuditRecord.audit_time).label("d"),
+                          func.count(AuditRecord.id).label("c"))
+                      .filter(AuditRecord.audit_time >= days[0])
+                      .group_by(func.date(AuditRecord.audit_time)).all())
+        audit_map = {str(r.d): r.c for r in audit_rows}
+
+        # 漏洞数 / 高危漏洞数（按 audit_id 过滤用户范围）
+        vuln_q = s.query(Vulnerability)
+        if not is_admin:
+            vuln_q = vuln_q.filter(Vulnerability.audit_id.in_(user_audit_ids))
+        vuln_rows = (vuln_q
+                     .join(AuditRecord, Vulnerability.audit_id == AuditRecord.audit_id)
+                     .with_entities(
+                         func.date(AuditRecord.audit_time).label("d"),
+                         func.count(Vulnerability.id).label("c"),
+                         func.sum(sqlalchemy.case((Vulnerability.risk_level == "高危", 1), else_=0)).label("high"))
+                     .filter(AuditRecord.audit_time >= days[0])
+                     .group_by(func.date(AuditRecord.audit_time)).all())
+        vuln_map = {str(r.d): (int(r.c), int(r.high or 0)) for r in vuln_rows}
+
+        trend = [{
+            "date": label,
+            "audits": audit_map.get(days[i].strftime("%Y-%m-%d"), 0),
+            "vulns": vuln_map.get(days[i].strftime("%Y-%m-%d"), (0, 0))[0],
+            "high": vuln_map.get(days[i].strftime("%Y-%m-%d"), (0, 0))[1],
+        } for i, label in enumerate(day_labels)]
 
         # ---- 3. 漏洞等级饼图 ----
         vuln_q = s.query(Vulnerability)

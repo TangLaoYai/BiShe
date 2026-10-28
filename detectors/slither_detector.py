@@ -44,6 +44,20 @@ CHECK_SUGGESTION_MAP = {
     "underflow": "升级编译器至 ^0.8.0 或使用 SafeMath。",
 }
 
+# Slither 检测规则的置信度：确定性规则为"高"，启发式/上下文相关为"中"，提示类为"低"
+CHECK_CONFIDENCE_MAP = {
+    "tx-origin": "高", "delegatecall": "高", "suicidal": "高",
+    "unprotected-selfdestruct": "高", "arbitrary-send-eth": "高",
+    "arbitrary-send": "高", "arbitrary-send-erc20": "高",
+    "reentrancy-eth": "中", "reentrancy-no-eth": "中",
+    "reentrancy-unlimited-gas": "中", "reentrancy-benign": "低",
+    "integer-overflow": "中", "underflow": "中",
+    "unchecked-lowlevel": "中", "unchecked-transfer": "中",
+    "weak-randomness": "中", "timestamp-dependence": "低",
+    "block-timestamp": "低", "calls-loop": "中",
+    "shadowing-state": "低", "unprotected-upgrade": "中",
+}
+
 
 def _build_cmd(sol_path: str, wsl_path: str) -> list:
     if config.SLITHER_MODE == "wsl":
@@ -158,6 +172,7 @@ class SlitherDetector(BaseDetector):
             vulns.append({
                 "vul_type": CHECK_NAME_MAP.get(check, check),
                 "risk_level": IMPACT_MAP.get(impact, "低危"),
+                "confidence": CHECK_CONFIDENCE_MAP.get(check, "中"),
                 "location": _location_of(item.get("elements")),
                 "description": (item.get("description") or "").strip()[:2000],
                 "suggestion": CHECK_SUGGESTION_MAP.get(
